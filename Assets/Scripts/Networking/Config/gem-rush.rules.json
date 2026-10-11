@@ -1,0 +1,14 @@
+{
+  "Name": "Gem Rush 3v3",
+  "MatchDefinition": {
+    "Teams": [
+      {
+        "Name": "Brawlers",
+        "TeamCount": { "Min": 2, "Max": 2 },
+        "PlayerCount": { "Min": 3, "Max": 3 }
+      }
+    ],
+    "MatchRules": []
+  },
+  "BackfillEnabled": false
+}

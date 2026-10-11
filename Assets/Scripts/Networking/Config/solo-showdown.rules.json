@@ -1,0 +1,14 @@
+{
+  "Name": "Solo Showdown 10",
+  "MatchDefinition": {
+    "Teams": [
+      {
+        "Name": "Solo",
+        "TeamCount": { "Min": 10, "Max": 10 },
+        "PlayerCount": { "Min": 1, "Max": 1 }
+      }
+    ],
+    "MatchRules": []
+  },
+  "BackfillEnabled": false
+}
