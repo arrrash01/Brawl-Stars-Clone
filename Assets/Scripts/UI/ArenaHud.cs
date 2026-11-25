@@ -16,7 +16,7 @@ namespace RiftRumble
         private static readonly Color Muted = new Color(.6f, .66f, .8f);
         private static readonly Color Lime = new Color(.81f, 1f, .28f);
         private Canvas canvas;
-        private RectTransform root, menu, hud, modal, result, touch, menuBackdrop, login;
+        private RectTransform root, menu, hud, result, touch, menuBackdrop;
         private TMP_FontAsset font;
         private TMP_Text status, playLabel, hudTitle, score, timer, instruction, playerInfo, ammo, superLabel, resultTitle, resultDetail;
         private TMP_Text ping, incomingLoss, outgoingLoss;
@@ -29,7 +29,7 @@ namespace RiftRumble
         private readonly UnityEngine.UI.Image[] ammoCells = new UnityEngine.UI.Image[GameRules.MaxAmmo];
         private readonly ArenaUiMotion[] cardMotion = new ArenaUiMotion[3];
         private readonly List<BrawlerView> previewModels = new List<BrawlerView>();
-        private UnityEngine.UI.Button playButton, practiceButton, directButton;
+        private UnityEngine.UI.Button playButton, practiceButton;
         private readonly UnityEngine.UI.Image[] cards = new UnityEngine.UI.Image[3];
         private readonly TMP_Text[] cardLabels = new TMP_Text[3];
         private readonly UnityEngine.UI.Image[] modes = new UnityEngine.UI.Image[2];
@@ -39,9 +39,8 @@ namespace RiftRumble
         private readonly Dictionary<NetworkBrawler, HealthLabel> healthLabels = new Dictionary<NetworkBrawler, HealthLabel>();
         private readonly List<NetworkBrawler> removedLabels = new List<NetworkBrawler>();
         private RectTransform healthRoot;
-        private TMP_InputField address;
-        private TMP_InputField username, serverIp, serverPort;
-        private TMP_Text loginError, playerGreeting;
+        private TMP_InputField username;
+        private string nameError;
         private bool menuVisible = true;
         private bool resultVisible;
         private int lastGems, lastPower;
@@ -55,6 +54,16 @@ namespace RiftRumble
             public TMP_Text Health;
             public UnityEngine.UI.Image Fill;
             public UnityEngine.UI.Image[] Ammo;
+        }
+
+        private void OnEnable()
+        {
+            Canvas.preWillRenderCanvases += UpdateNameplates;
+        }
+
+        private void OnDisable()
+        {
+            Canvas.preWillRenderCanvases -= UpdateNameplates;
         }
 
         private void Start()
@@ -80,7 +89,7 @@ namespace RiftRumble
                 var events = new GameObject("Event System", typeof(EventSystem), typeof(InputSystemUIInputModule));
                 events.transform.SetParent(transform, false);
             }
-            BuildMenu(); BuildHud(); BuildDirectModal(); BuildResults(); BuildLogin();
+            BuildMenu(); BuildHud(); BuildResults();
             RefreshSelection();
         }
 
@@ -187,8 +196,11 @@ namespace RiftRumble
                 stripe.rectTransform.localEulerAngles = new Vector3(0, 0, -24);
             }
             Label(menu, "BRAWLERS", 48, 30, 750, 75, 62, Color.white).fontStyle = FontStyles.Bold;
-            playerGreeting = Label(menu, "", 1010, 45, 535, 40, 24, Color.white, TextAlignmentOptions.MidlineRight);
-            playerGreeting.richText = false;
+            username = InputField(menu, "Username", "Enter your name", 1010, 32, 535, ArenaJoinData.MaxUsernameCharacters);
+            username.textComponent.alignment = TextAlignmentOptions.MidlineRight;
+            username.SetTextWithoutNotify(ArenaConnection.Instance.Username);
+            username.onValueChanged.AddListener(_ => nameError = null);
+            username.onEndEdit.AddListener(_ => SaveUsername());
 
             for (int i = 0; i < 3; i++)
             {
@@ -226,14 +238,9 @@ namespace RiftRumble
                 Label(modes[i].transform, GameRules.ModeName((GameMode)i), 105, 14, 585, 60, 32, Color.white);
             }
             status = Label(menu, "", 50, 750, 1485, 34, 21, Color.white);
-            directButton = Button(menu, "DIRECT CONNECT", 48, 799, 294, 65, Panel, () =>
-            {
-                if (!string.IsNullOrEmpty(ArenaConnection.Instance.PreferredServerAddress)) address.text = ArenaConnection.Instance.PreferredServerAddress;
-                modal.gameObject.SetActive(true);
-            });
-            practiceButton = Button(menu, "PRACTICE", 362, 799, 270, 65, Panel, () => ArenaConnection.Instance.StartPractice());
+            practiceButton = Button(menu, "PRACTICE", 48, 799, 270, 65, Panel, StartPractice);
             playButton = Button(menu, "PLAY", 1147, 789, 401, 85, new Color(1, .79f, .18f), FindMatch, 35);
-            DecorateButton(directButton); DecorateButton(practiceButton); DecorateButton(playButton);
+            DecorateButton(practiceButton); DecorateButton(playButton);
             playLabel = playButton.GetComponentInChildren<TMP_Text>();
             playLabel.color = Ink; playLabel.fontStyle = FontStyles.Bold;
         }
@@ -294,9 +301,25 @@ namespace RiftRumble
         private async void FindMatch()
         {
             if (ArenaConnection.Instance.IsBusy) ArenaConnection.Instance.CancelMatchmaking();
-            else if (!string.IsNullOrEmpty(ArenaConnection.Instance.PreferredServerAddress))
-                ArenaConnection.Instance.ConnectDirect(ArenaConnection.Instance.PreferredServerAddress);
-            else await ArenaConnection.Instance.FindMatchAsync();
+            else
+            {
+                if (!SaveUsername()) return;
+                if (!string.IsNullOrEmpty(ArenaConnection.Instance.PreferredServerAddress))
+                    ArenaConnection.Instance.ConnectDirect(ArenaConnection.Instance.PreferredServerAddress);
+                else await ArenaConnection.Instance.FindMatchAsync();
+            }
+        }
+
+        private bool SaveUsername()
+        {
+            if (!ArenaConnection.Instance.TrySetUsername(username.text, out nameError)) return false;
+            username.SetTextWithoutNotify(ArenaConnection.Instance.Username);
+            return true;
+        }
+
+        private void StartPractice()
+        {
+            if (SaveUsername()) ArenaConnection.Instance.StartPractice();
         }
 
         private TMP_InputField InputField(Transform parent, string name, string placeholder, float x, float y, float width, int limit)
@@ -315,68 +338,6 @@ namespace RiftRumble
             field.characterLimit = limit; field.lineType = TMP_InputField.LineType.SingleLine;
             field.richText = false;
             return field;
-        }
-
-        private void BuildLogin()
-        {
-            login = Full(root, "Player login");
-            login.gameObject.AddComponent<UnityEngine.UI.Image>().color = Ink;
-            Box(login, "Brand mark", 48, 40, 8, 61, Lime);
-            Label(login, "RIFT <color=#D0FF47>RUMBLE</color>", 72, 30, 900, 75, 60, Color.white);
-            var panel = Box(login, "Login card", 385, 145, 830, 660, Panel, true);
-            Box(panel.transform, "Accent", 0, 0, 830, 5, Lime);
-            Label(panel.transform, "READY TO RUMBLE?", 40, 27, 750, 68, 50, Color.white);
-            Label(panel.transform, "Choose the name other players will see.", 42, 105, 746, 38, 25, Muted);
-            Label(panel.transform, "USERNAME", 40, 164, 750, 32, 23, Lime);
-            username = InputField(panel.transform, "Username", "Enter your name", 40, 205, 750, 20);
-            Label(panel.transform, "SERVER IP  /  OPTIONAL", 40, 306, 540, 32, 23, Muted);
-            Label(panel.transform, "PORT", 612, 306, 178, 32, 23, Muted);
-            serverIp = InputField(panel.transform, "Server IP", "e.g. 127.0.0.1", 40, 347, 548, 45);
-            serverPort = InputField(panel.transform, "Server port", "7777", 612, 347, 178, 5);
-            serverPort.contentType = TMP_InputField.ContentType.IntegerNumber;
-            Label(panel.transform, "Leave the server blank for matchmaking or practice.\nChoose your brawler and mode on the next screen.", 42, 426, 746, 62, 23, Muted);
-            loginError = Label(panel.transform, "", 40, 491, 750, 50, 22, new Color(1, .48f, .48f));
-            loginError.textWrappingMode = TextWrappingModes.Normal;
-            Button(panel.transform, "CONTINUE   >", 40, 556, 750, 70, Lime, ContinueLogin, 32);
-            bool required = !ArenaConnection.Instance.HasLogin;
-            login.gameObject.SetActive(required); menu.gameObject.SetActive(!required); menuVisible = !required;
-            foreach (var camera in previewCameras) camera.enabled = !required;
-        }
-
-        private void ContinueLogin()
-        {
-            if (!ArenaConnection.Instance.TryLogin(username.text, serverIp.text, serverPort.text, out string error))
-            {
-                loginError.text = error;
-                return;
-            }
-            loginError.text = "";
-            username.DeactivateInputField(); serverIp.DeactivateInputField(); serverPort.DeactivateInputField();
-            EventSystem.current?.SetSelectedGameObject(null);
-            RefreshSelection();
-        }
-
-        private void BuildDirectModal()
-        {
-            modal = Full(root, "Direct server connection");
-            modal.gameObject.AddComponent<UnityEngine.UI.Image>().color = new Color(.01f, .02f, .06f, .94f);
-            var panel = Box(modal, "Connection card", 400, 240, 800, 420, Panel, true);
-            Label(panel.transform, "JOIN A DEDICATED ARENA", 35, 24, 740, 55, 39, Color.white);
-            Label(panel.transform, "Use the same mode as the server. The match starts when all slots are filled.", 35, 94, 730, 66, 25, Muted);
-            var fieldBox = Box(panel.transform, "Server address", 35, 190, 730, 68, Ink, true);
-            address = fieldBox.gameObject.AddComponent<TMP_InputField>();
-            var viewport = Rect(fieldBox.transform, "Text viewport", 18, 5, 694, 58);
-            viewport.gameObject.AddComponent<UnityEngine.UI.RectMask2D>();
-            var fieldText = Label(viewport, "", 0, 0, 694, 58, 28, Color.white);
-            address.textViewport = viewport; address.textComponent = (TextMeshProUGUI)fieldText;
-            if (font != null) address.fontAsset = font;
-            address.text = "127.0.0.1:7777"; address.characterLimit = 64;
-            Button(panel.transform, "BACK", 35, 303, 220, 70, Ink, () => modal.gameObject.SetActive(false));
-            Button(panel.transform, "CONNECT   >", 275, 303, 490, 70, Lime, () =>
-            {
-                modal.gameObject.SetActive(false); ArenaConnection.Instance.ConnectDirect(address.text);
-            });
-            modal.gameObject.SetActive(false);
         }
 
         private void BuildHud()
@@ -489,9 +450,7 @@ namespace RiftRumble
             if (root == null || ArenaConnection.Instance == null) return;
             var connection = ArenaConnection.Instance; var match = ArenaMatch.Instance;
             bool inMatch = match != null && match.IsSpawned && NetworkManager.Singleton.IsClient;
-            bool showLogin = !connection.HasLogin && !inMatch;
-            bool showMenu = !inMatch && !showLogin;
-            login.gameObject.SetActive(showLogin);
+            bool showMenu = !inMatch;
             menuBackdrop.gameObject.SetActive(!inMatch);
             if (menuVisible != showMenu)
             {
@@ -509,15 +468,14 @@ namespace RiftRumble
             if (finished && !resultVisible) ArenaAudio.PlayResult(NetworkBrawler.Local != null && NetworkBrawler.Local.Team.Value == match.WinningTeam);
             resultVisible = finished;
             result.gameObject.SetActive(finished);
-            NetworkBrawler.InputEnabled = inMatch && match.IsPlaying && !finished && !modal.gameObject.activeSelf;
+            NetworkBrawler.InputEnabled = inMatch && match.IsPlaying && !finished;
             if (superRelease > 0 && Time.unscaledTime > superRelease) { NetworkBrawler.TouchSuper = false; superRelease = 0; }
-            UpdateNameplates(inMatch);
             UpdateVisuals(inMatch);
             if (Time.unscaledTime < nextRefresh) return; nextRefresh = Time.unscaledTime + .1f;
-            status.text = connection.Status == "Choose your brawler and jump in." ? "" : connection.Status;
-            playerGreeting.text = connection.Username;
+            status.text = nameError ?? (connection.Status == "Choose your brawler and jump in." ? "" : connection.Status);
+            if (!username.isFocused && nameError == null) username.SetTextWithoutNotify(connection.Username);
             playLabel.text = connection.IsBusy ? "CANCEL" : string.IsNullOrEmpty(connection.PreferredServerAddress) ? "PLAY" : "JOIN SERVER";
-            practiceButton.interactable = directButton.interactable = !connection.IsBusy;
+            practiceButton.interactable = username.interactable = !connection.IsBusy;
             if (!inMatch) return;
             if (Time.unscaledTime >= nextNetworkRefresh)
             {
@@ -587,14 +545,19 @@ namespace RiftRumble
             }
         }
 
-        private void UpdateNameplates(bool visible)
+        private void UpdateNameplates()
         {
+            // Project labels after the camera has finished its LateUpdate follow.
+            if (healthRoot == null) return;
+            var match = ArenaMatch.Instance;
+            bool visible = hud.gameObject.activeSelf && match != null && match.IsSpawned;
             removedLabels.Clear();
             foreach (var pair in healthLabels)
                 if (pair.Key == null || !pair.Key.IsSpawned || !visible) removedLabels.Add(pair.Key);
             foreach (var player in removedLabels) { Destroy(healthLabels[player].Root.gameObject); healthLabels.Remove(player); }
-            if (!visible || Camera.main == null) return;
-            foreach (var player in ArenaMatch.Instance.Players)
+            var camera = Camera.main;
+            if (!visible || camera == null) return;
+            foreach (var player in match.Players)
             {
                 if (player == null) continue;
                 if (!healthLabels.TryGetValue(player, out HealthLabel label))
@@ -615,7 +578,7 @@ namespace RiftRumble
                     label.Name.fontSizeMin = 10;
                     healthLabels[player] = label;
                 }
-                Vector3 screen = Camera.main.WorldToScreenPoint(player.transform.position + Vector3.up * 3f);
+                Vector3 screen = camera.WorldToScreenPoint(player.transform.position + Vector3.up * 3f);
                 label.Root.gameObject.SetActive(player.Alive.Value && screen.z > 0);
                 RectTransformUtility.ScreenPointToLocalPointInRectangle(healthRoot, screen, null, out Vector2 local);
                 label.Root.anchorMin = label.Root.anchorMax = new Vector2(.5f, .5f); label.Root.anchoredPosition = local - healthRoot.rect.center + new Vector2(-82, 0);

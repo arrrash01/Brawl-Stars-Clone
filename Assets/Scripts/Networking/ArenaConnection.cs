@@ -23,20 +23,25 @@ namespace RiftRumble
     {
         public static ArenaConnection Instance { get; private set; }
 
+        [Header("Server connection")]
+        [SerializeField, Tooltip("Numeric server IP. Leave blank to use online matchmaking. Set before entering Play Mode or building the client.")]
+        string serverIp = string.Empty;
+        [SerializeField, Tooltip("Direct server UDP port; also used by the dedicated server listener.")]
+        ushort port = 7777;
+
         [Header("Dedicated server matchmaking")]
         [SerializeField] string servicesEnvironment = "production";
         [SerializeField] string gemRushQueue = "rift-gem-rush";
         [SerializeField] string showdownQueue = "rift-solo-showdown";
-        [SerializeField] ushort port = 7777;
         [SerializeField, Min(5)] float connectionTimeout = 20f;
         [SerializeField] ArenaMatch matchPrefab;
 
         public BrawlerId SelectedBrawler { get; set; } = BrawlerId.Bront;
         public GameMode SelectedMode { get; set; } = GameMode.GemRush;
-        public string Username { get; private set; } = string.Empty;
-        public string PreferredServerAddress { get; private set; } = string.Empty;
+        public string Username { get; private set; } = "Player";
+        public string PreferredServerAddress => serverIp?.Trim() ?? string.Empty;
         public bool HasLogin => !string.IsNullOrEmpty(Username);
-        public string Status { get; private set; } = "Enter a username to continue.";
+        public string Status { get; private set; } = "Choose your brawler and jump in.";
         public bool IsBusy => busy || leaving || matchmakingCancellation != null;
         public bool IsPractice { get; private set; }
         public bool IsDedicatedServer { get; private set; }
@@ -155,11 +160,9 @@ namespace RiftRumble
                 var address = Argument(args, "-arenaConnect");
                 var practice = HasArgument(args, "-arenaPractice");
                 var hasUsername = HasArgument(args, "-username");
-                // Explicit startup commands preserve unattended client/practice launches.
-                // Normal visual startup waits for the login panel instead.
-                if (hasUsername || practice || !string.IsNullOrEmpty(address) || Application.isBatchMode)
+                if (hasUsername)
                 {
-                    if (!TryLogin(hasUsername ? Argument(args, "-username") : "Player", "", "", out var error))
+                    if (!TrySetUsername(Argument(args, "-username"), out var error))
                     {
                         SetStatus(error);
                         Debug.LogWarning($"[Rift Rumble] {error}");
@@ -171,50 +174,16 @@ namespace RiftRumble
             }
         }
 
-        public bool TryLogin(string username, string ip, string portText, out string error)
+        public bool TrySetUsername(string username, out string error)
         {
-            error = null;
+            if (!ArenaJoinData.TryNormalizeUsername(username, out var normalizedName, out error)) return false;
+            if (Username == normalizedName) return true;
             if (IsBusy || destroying || (manager != null && (manager.IsListening || manager.ShutdownInProgress)))
             {
-                error = "Leave the current arena before changing login details.";
+                error = "Leave the current arena before changing your name.";
                 return false;
             }
-            if (!ArenaJoinData.TryNormalizeUsername(username, out var normalizedName, out error)) return false;
-
-            var address = ip?.Trim() ?? string.Empty;
-            var specifiedPort = portText?.Trim() ?? string.Empty;
-            var endpoint = string.Empty;
-            if (address.Length == 0)
-            {
-                if (specifiedPort.Length != 0)
-                {
-                    error = "Enter an IP address when specifying a server port.";
-                    return false;
-                }
-            }
-            else
-            {
-                // The IP field accepts numeric IPv4/IPv6; the port has its own field.
-                if (address.StartsWith("[", StringComparison.Ordinal) && address.EndsWith("]", StringComparison.Ordinal))
-                    address = address.Substring(1, address.Length - 2);
-                if (!IPAddress.TryParse(address, out var parsedAddress))
-                {
-                    error = "Enter a valid numeric IPv4 or IPv6 address.";
-                    return false;
-                }
-                var endpointPort = port;
-                if (specifiedPort.Length != 0 && (!ushort.TryParse(specifiedPort, NumberStyles.None,
-                    CultureInfo.InvariantCulture, out endpointPort) || endpointPort == 0))
-                {
-                    error = "The server port must be between 1 and 65535.";
-                    return false;
-                }
-                endpoint = parsedAddress.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6
-                    ? $"[{parsedAddress}]:{endpointPort}" : $"{parsedAddress}:{endpointPort}";
-            }
-
             Username = normalizedName;
-            PreferredServerAddress = endpoint;
             SetStatus("Choose your brawler and jump in.");
             return true;
         }
@@ -373,7 +342,7 @@ namespace RiftRumble
             if (!EnsureClientLogin() || !CanStart()) return;
             if (!TryEndpoint(address, port, out var host, out var endpointPort))
             {
-                SetStatus("Enter a server IP address, optionally followed by :port (for example 127.0.0.1:7777).");
+                SetStatus("Check Server IP and Port on the scene's ArenaConnection component (port 1–65535).");
                 return;
             }
             IsPractice = false;
@@ -563,7 +532,7 @@ namespace RiftRumble
                 ServerMatches = null;
                 busy = false;
                 if (sceneMatch != null) sceneMatch.NetworkObject.CheckObjectVisibility = null;
-                SetStatus(HasLogin ? "Choose your brawler and jump in." : "Enter a username to continue.");
+                SetStatus(HasLogin ? "Choose your brawler and jump in." : "Enter a username in brawler selection.");
             }
             finally
             {
@@ -575,8 +544,7 @@ namespace RiftRumble
         bool EnsureClientLogin()
         {
             if (HasLogin) return true;
-            if (Application.isBatchMode && TryLogin("Player", "", "", out _)) return true;
-            SetStatus("Enter a username to continue.");
+            SetStatus("Enter a username in brawler selection.");
             return false;
         }
 
@@ -747,7 +715,7 @@ namespace RiftRumble
                 if (!ushort.TryParse(host.Substring(separator + 1), out parsedPort) || parsedPort == 0) return false;
                 host = host.Substring(0, separator);
             }
-            return IPAddress.TryParse(host, out _);
+            return parsedPort != 0 && IPAddress.TryParse(host, out _);
         }
 
         void OnDestroy()

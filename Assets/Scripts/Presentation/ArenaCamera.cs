@@ -66,7 +66,7 @@ namespace RiftRumble
                 focus.x = Mathf.Clamp(focus.x, -ArenaLayout.HalfWidth + 7f, ArenaLayout.HalfWidth - 7f);
                 focus.z = Mathf.Clamp(focus.z, -ArenaLayout.HalfDepth + 7.5f, ArenaLayout.HalfDepth - 7.5f);
                 if (!focusInitialized) { smoothedFocus = focus; focusInitialized = true; }
-                smoothedFocus = Vector3.Lerp(smoothedFocus, focus, 1f - Mathf.Exp(-9f * Time.deltaTime));
+                smoothedFocus = Vector3.Lerp(smoothedFocus, focus, 1f - Mathf.Exp(-30f * Time.deltaTime));
                 transform.rotation = Quaternion.Euler(57f, 0, 0);
                 transform.position = smoothedFocus - transform.forward * 28f;
                 Camera.orthographicSize = 9.6f;

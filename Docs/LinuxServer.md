@@ -46,7 +46,7 @@ sudo ufw allow 7777/udp
 
 Use your selected port if different. For a machine behind a router, forward that same UDP port to the server. TCP 7777 is not used by the game.
 
-In a matching client build, enter a username, the server's reachable IPv4 address, and port `7777`, select a game mode, and choose **Join Server**. Use `127.0.0.1` only when the client runs on the server machine. This build uses the existing protocol 3 and network prefabs. **Find Match** still requires separately configured Unity cloud matchmaking and server allocations; direct **Join Server** does not.
+Before building the client, set the server's reachable IPv4 address and port `7777` on the scene's **Rift Rumble → ArenaConnection → Server connection** Inspector fields. In the client, edit your name on brawler selection, select a game mode, and choose **Join Server**. Use `127.0.0.1` only when the client runs on the server machine. Existing `-arenaConnect <IP[:port]>` launch arguments remain supported. This change uses the existing protocol 3 and network prefabs; the selection UI requires a client rebuild only. With a blank Server IP, **Play** still requires separately configured Unity cloud matchmaking and server allocations; direct **Join Server** does not.
 
 ## Keep it running after SSH logout
 

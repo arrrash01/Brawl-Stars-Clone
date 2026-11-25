@@ -393,10 +393,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e74b5d77590a8f3439b90605aada5d82, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RiftRumble.ArenaConnection
+  serverIp: 185.37.53.92
+  port: 7777
   servicesEnvironment: production
   gemRushQueue: rift-gem-rush
   showdownQueue: rift-solo-showdown
-  port: 7777
   connectionTimeout: 20
   matchPrefab: {fileID: 8038910338089482689, guid: e1ff6ba3b6c73d04fb5581e2bb296242, type: 3}
 --- !u!114 &1050616310
